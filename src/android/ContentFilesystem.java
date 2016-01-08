@@ -18,6 +18,16 @@
  */
 package org.apache.cordova.file;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.OutputStream;
+
+import org.apache.cordova.CordovaResourceApi;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import android.content.ContentResolver;
 import android.content.Context;
 import android.database.Cursor;
@@ -25,21 +35,15 @@ import android.net.Uri;
 import android.provider.DocumentsContract;
 import android.provider.MediaStore;
 import android.provider.OpenableColumns;
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import org.apache.cordova.CordovaResourceApi;
-import org.json.JSONException;
-import org.json.JSONObject;
 
 public class ContentFilesystem extends Filesystem {
 
     private final Context context;
 
-	public ContentFilesystem(Context context, CordovaResourceApi resourceApi) {
-		super(Uri.parse("content://"), "content", resourceApi);
+    public ContentFilesystem(Context context, CordovaResourceApi resourceApi) {
+        super(Uri.parse("content://"), "content", resourceApi);
         this.context = context;
-	}
+    }
 
     @Override
     public Uri toNativeUri(LocalFilesystemURL inputURL) {
@@ -83,107 +87,105 @@ public class ContentFilesystem extends Filesystem {
     }
 
     @Override
-	public JSONObject getFileForLocalURL(LocalFilesystemURL inputURL,
-			String fileName, JSONObject options, boolean directory) throws IOException, TypeMismatchException, JSONException {
+    public JSONObject getFileForLocalURL(LocalFilesystemURL inputURL,
+            String fileName, JSONObject options, boolean directory) throws IOException, TypeMismatchException, JSONException {
         throw new UnsupportedOperationException("getFile() not supported for content:. Use resolveLocalFileSystemURL instead.");
-	}
+    }
 
-	@Override
-	public boolean removeFileAtLocalURL(LocalFilesystemURL inputURL)
-			throws NoModificationAllowedException {
+    @Override
+    public boolean removeFileAtLocalURL(LocalFilesystemURL inputURL)
+            throws NoModificationAllowedException {
         Uri contentUri = toNativeUri(inputURL);
-		try {
+        try {
             context.getContentResolver().delete(contentUri, null, null);
-		} catch (UnsupportedOperationException t) {
-			// Was seeing this on the File mobile-spec tests on 4.0.3 x86 emulator.
-			// The ContentResolver applies only when the file was registered in the
-			// first case, which is generally only the case with images.
+        } catch (UnsupportedOperationException t) {
+            // Was seeing this on the File mobile-spec tests on 4.0.3 x86 emulator.
+            // The ContentResolver applies only when the file was registered in the
+            // first case, which is generally only the case with images.
             throw new NoModificationAllowedException("Deleting not supported for content uri: " + contentUri);
-		}
+        }
         return true;
-	}
+    }
 
-	@Override
-	public boolean recursiveRemoveFileAtLocalURL(LocalFilesystemURL inputURL)
-			throws NoModificationAllowedException {
-		throw new NoModificationAllowedException("Cannot remove content url");
-	}
+    @Override
+    public boolean recursiveRemoveFileAtLocalURL(LocalFilesystemURL inputURL)
+            throws NoModificationAllowedException {
+        throw new NoModificationAllowedException("Cannot remove content url");
+    }
 
     @Override
     public LocalFilesystemURL[] listChildren(LocalFilesystemURL inputURL) throws FileNotFoundException {
         throw new UnsupportedOperationException("readEntriesAtLocalURL() not supported for content:. Use resolveLocalFileSystemURL instead.");
     }
 
-	@Override
-	public JSONObject getFileMetadataForLocalURL(LocalFilesystemURL inputURL) throws FileNotFoundException {
+    @Override
+    public JSONObject getFileMetadataForLocalURL(LocalFilesystemURL inputURL) throws FileNotFoundException {
         long size = -1;
         long lastModified = 0;
         Uri nativeUri = toNativeUri(inputURL);
         String mimeType = resourceApi.getMimeType(nativeUri);
         Cursor cursor = openCursorForURL(nativeUri);
         try {
-        	if (cursor != null && cursor.moveToFirst()) {
-        		size = resourceSizeForCursor(cursor);
-                Long modified = lastModifiedDateForCursor(cursor);
-                if (modified != null)
-                    lastModified = modified.longValue();
-        	} else {
+            if (cursor != null && cursor.moveToFirst()) {
+                size = resourceSizeForCursor(cursor);
+                lastModified = lastModifiedDateForCursor(cursor);
+            } else {
                 // Some content providers don't support cursors at all!
                 CordovaResourceApi.OpenForReadResult offr = resourceApi.openForRead(nativeUri);
-    			size = offr.length;
-        	}
+                size = offr.length;
+            }
         } catch (IOException e) {
             throw new FileNotFoundException();
         } finally {
-        	if (cursor != null)
-        		cursor.close();
+            if (cursor != null)
+                cursor.close();
         }
 
         JSONObject metadata = new JSONObject();
         try {
-        	metadata.put("size", size);
-        	metadata.put("type", mimeType);
-        	metadata.put("name", name);
-        	metadata.put("fullPath", inputURL.path);
-        	metadata.put("lastModifiedDate", lastModified);
+            metadata.put("size", size);
+            metadata.put("type", mimeType);
+            metadata.put("name", name);
+            metadata.put("fullPath", inputURL.path);
+            metadata.put("lastModifiedDate", lastModified);
         } catch (JSONException e) {
-        	return null;
+            return null;
         }
         return metadata;
-	}
+    }
 
-	@Override
-	public long writeToFileAtURL(LocalFilesystemURL inputURL, String data,
-			int offset, boolean isBinary) throws NoModificationAllowedException {
+    @Override
+    public long writeToFileAtURL(LocalFilesystemURL inputURL, String data,
+            int offset, boolean isBinary) throws NoModificationAllowedException {
         throw new NoModificationAllowedException("Couldn't write to file given its content URI");
     }
-	@Override
-	public long truncateFileAtURL(LocalFilesystemURL inputURL, long size)
-			throws NoModificationAllowedException {
+    @Override
+    public long truncateFileAtURL(LocalFilesystemURL inputURL, long size)
+            throws NoModificationAllowedException {
         throw new NoModificationAllowedException("Couldn't truncate file given its content URI");
-	}
+    }
 
-	protected Cursor openCursorForURL(Uri nativeUri) {
+    protected Cursor openCursorForURL(Uri nativeUri) {
         ContentResolver contentResolver = context.getContentResolver();
         try {
             return contentResolver.query(nativeUri, null, null, null, null);
         } catch (UnsupportedOperationException e) {
             return null;
         }
-	}
+    }
 
-	private Long resourceSizeForCursor(Cursor cursor) {
+    private Long resourceSizeForCursor(Cursor cursor) {
         int columnIndex = cursor.getColumnIndex(OpenableColumns.SIZE);
         if (columnIndex != -1) {
             String sizeStr = cursor.getString(columnIndex);
             if (sizeStr != null) {
-            	return Long.parseLong(sizeStr);
+                return Long.parseLong(sizeStr);
             }
         }
         return null;
-	}
-	
-	protected Long lastModifiedDateForCursor(Cursor cursor) {
+    }
+    
+    protected Long lastModifiedDateForCursor(Cursor cursor) {
         int columnIndex = cursor.getColumnIndex(MediaStore.MediaColumns.DATE_MODIFIED);
         if (columnIndex == -1) {
             columnIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED);
@@ -195,7 +197,7 @@ public class ContentFilesystem extends Filesystem {
             }
         }
         return null;
-	}
+    }
 
     @Override
     public String filesystemPathForURL(LocalFilesystemURL url) {
@@ -203,14 +205,14 @@ public class ContentFilesystem extends Filesystem {
         return f == null ? null : f.getAbsolutePath();
     }
 
-	@Override
-	public LocalFilesystemURL URLforFilesystemPath(String path) {
-		// Returns null as we don't support reverse mapping back to content:// URLs
-		return null;
-	}
+    @Override
+    public LocalFilesystemURL URLforFilesystemPath(String path) {
+        // Returns null as we don't support reverse mapping back to content:// URLs
+        return null;
+    }
 
-	@Override
-	public boolean canRemoveFileAtLocalURL(LocalFilesystemURL inputURL) {
-		return true;
-	}
+    @Override
+    public boolean canRemoveFileAtLocalURL(LocalFilesystemURL inputURL) {
+        return true;
+    }
 }
